@@ -151,7 +151,7 @@ jobs:
             ## Docker
 
             ```bash
-            docker pull ghcr.io/${{ github.repository_owner }}/metricstore:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository_owner }}/metricstore:${{ needs.docker.outputs.version }}
             ```
 
             ## Quick Start

@@ -45,15 +45,15 @@
     "mcp",
     "model-context-protocol"
   ],
-  "repository": "https://github.com/YOUR_USERNAME/metricstore",
-  "homepage": "https://github.com/YOUR_USERNAME/metricstore#readme",
+  "repository": "https://github.com/Trailblazer-Analytics/MetricStore",
+  "homepage": "https://github.com/Trailblazer-Analytics/MetricStore#readme",
   "license": "Apache-2.0",
   "author": {
     "name": "MetricStore Contributors"
   },
   "runtime": {
     "type": "docker",
-    "image": "ghcr.io/YOUR_USERNAME/metricstore:latest",
+    "image": "ghcr.io/trailblazer-analytics/metricstore:latest",
     "env": [
       {
         "name": "DATABASE_URL",

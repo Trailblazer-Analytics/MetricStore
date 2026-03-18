@@ -9,6 +9,29 @@ description = "A lightweight, tool-agnostic metrics catalog with REST API and MC
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
+keywords = [
+    "metrics",
+    "semantic-layer",
+    "analytics",
+    "mcp",
+    "model-context-protocol",
+    "dbt",
+    "business-intelligence",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 dependencies = [
     "fastapi[standard]>=0.115",
     "sqlalchemy[asyncio]>=2.0",
@@ -21,6 +44,13 @@ dependencies = [
     "uvicorn[standard]",
     "python-multipart",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Trailblazer-Analytics/MetricStore"
+Repository = "https://github.com/Trailblazer-Analytics/MetricStore"
+Documentation = "https://github.com/Trailblazer-Analytics/MetricStore#readme"
+Issues = "https://github.com/Trailblazer-Analytics/MetricStore/issues"
+Changelog = "https://github.com/Trailblazer-Analytics/MetricStore/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -37,7 +67,7 @@ packages = ["src/metricstore"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

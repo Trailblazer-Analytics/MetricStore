@@ -25,7 +25,7 @@ LABEL org.opencontainers.image.title="MetricStore" \
       org.opencontainers.image.description="Governed business metrics catalog with REST API and MCP server" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_SHA}" \
-      org.opencontainers.image.source="https://github.com/YOUR_USERNAME/metricstore" \
+    org.opencontainers.image.source="https://github.com/Trailblazer-Analytics/MetricStore" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.base.name="python:3.12-slim"
 

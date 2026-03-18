@@ -223,7 +223,7 @@ MetricStore reads settings from environment variables (and `.env`).
 If you publish this repo as a template, you can add a one-click button:
 
 ```md
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/<OWNER>/<REPO>)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Trailblazer-Analytics/MetricStore)
 ```
 
 Set required env vars in Railway:
