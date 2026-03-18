@@ -259,6 +259,7 @@ Use this checklist when shipping a new public release.
 	- `ruff check .` and `pytest -q` pass locally (or known integration-test caveats are documented)
 2. Merge the open "Release Please" PR (or wait for it to be created after merge commits land on `main`).
 	- This updates version files and `CHANGELOG.md`.
+	- If the PR is not created, either enable "Allow GitHub Actions to create and approve pull requests" in repository settings or add a `RELEASE_PLEASE_TOKEN` secret with repo-scoped permissions.
 3. Confirm a new Git tag (`vX.Y.Z`) is created.
 	- Tag push triggers `.github/workflows/release.yml`.
 4. Verify release artifacts:
