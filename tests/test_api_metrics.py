@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+
 import pytest
 
 
@@ -185,3 +187,182 @@ async def test_get_specific_version(test_client, seeded_db):
     snap = v1.json()["snapshot"]
     assert snap["name"] == "cac"
     assert "description" in snap
+
+
+# ── 404 / error paths ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_metric_not_found_by_id(test_client) -> None:
+    r = await test_client.get("/api/v1/metrics/00000000-0000-0000-0000-000000000001")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_metric_not_found_by_name(test_client) -> None:
+    r = await test_client.get("/api/v1/metrics/no_such_metric_name")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_versions_metric_not_found(test_client) -> None:
+    r = await test_client.get(
+        "/api/v1/metrics/00000000-0000-0000-0000-000000000001/versions"
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_specific_version_not_found(test_client, seeded_db) -> None:
+    metric = seeded_db["metrics"]["dau"]
+    r = await test_client.get(f"/api/v1/metrics/{metric.id}/versions/999")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_metric_rename_conflict(test_client, seeded_db) -> None:
+    target = seeded_db["metrics"]["dau"]
+    r = await test_client.put(
+        f"/api/v1/metrics/{target.id}",
+        json={"name": "revenue"},  # "revenue" already exists
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_metric_not_found(test_client) -> None:
+    r = await test_client.put(
+        "/api/v1/metrics/00000000-0000-0000-0000-000000000001",
+        json={"description": "does not exist"},
+    )
+    assert r.status_code == 404
+
+
+# ── Export formats ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_export_osi(test_client, seeded_db) -> None:
+    r = await test_client.post("/api/v1/metrics/export?format=osi")
+    assert r.status_code == 200
+    assert "yaml" in r.headers["content-type"]
+    assert "Content-Disposition" in r.headers
+
+
+@pytest.mark.asyncio
+async def test_export_dbt(test_client, seeded_db) -> None:
+    r = await test_client.post("/api/v1/metrics/export?format=dbt")
+    assert r.status_code == 200
+    assert "yaml" in r.headers["content-type"]
+    assert "Content-Disposition" in r.headers
+
+
+# ── Import endpoints ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_import_cube_not_implemented(test_client) -> None:
+    r = await test_client.post(
+        "/api/v1/metrics/import?format=cube",
+        files={"file": ("unused.yaml", io.BytesIO(b""), "text/yaml")},
+    )
+    assert r.status_code == 501
+
+
+@pytest.mark.asyncio
+async def test_import_no_file(test_client) -> None:
+    r = await test_client.post("/api/v1/metrics/import?format=metricstore")
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_import_metricstore_yaml(test_client) -> None:
+    yaml_content = (
+        "metrics:\n"
+        "  - name: yaml_imported_metric\n"
+        "    metric_type: simple\n"
+        "    description: Imported from YAML in tests\n"
+    )
+    r = await test_client.post(
+        "/api/v1/metrics/import?format=metricstore",
+        files={
+            "file": (
+                "metrics.yaml",
+                io.BytesIO(yaml_content.encode()),
+                "application/yaml",
+            )
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["imported"] == 1
+    assert body["errors"] == []
+
+
+@pytest.mark.asyncio
+async def test_import_metricstore_yaml_upsert(test_client, seeded_db) -> None:
+    yaml_content = (
+        "metrics:\n"
+        "  - name: revenue\n"
+        "    metric_type: simple\n"
+        "    description: Updated via import\n"
+    )
+    r = await test_client.post(
+        "/api/v1/metrics/import?format=metricstore",
+        files={
+            "file": (
+                "upsert.yaml",
+                io.BytesIO(yaml_content.encode()),
+                "application/yaml",
+            )
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["updated"] == 1
+
+
+# ── List filter paths ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_metrics_filter_owner(test_client, seeded_db) -> None:
+    r = await test_client.get("/api/v1/metrics?owner=Finance+Analytics")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert items
+    assert all(i["owner"] == "Finance Analytics" for i in items)
+
+
+@pytest.mark.asyncio
+async def test_list_metrics_filter_metric_type(test_client, seeded_db) -> None:
+    r = await test_client.get("/api/v1/metrics?metric_type=derived")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert items
+    assert all(i["metric_type"] == "derived" for i in items)
+
+
+@pytest.mark.asyncio
+async def test_list_metrics_search_special_chars(test_client, seeded_db) -> None:
+    # Non-alphanumeric search falls back to ILIKE
+    r = await test_client.get("/api/v1/metrics?search=churn+rate")
+    assert r.status_code == 200
+    assert r.json()["total"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_list_metrics_filter_collection_id(test_client, seeded_db) -> None:
+    # Create a collection and add a metric to it
+    coll_r = await test_client.post(
+        "/api/v1/collections", json={"name": "filter_test_coll"}
+    )
+    cid = coll_r.json()["id"]
+    mid = str(seeded_db["metrics"]["mrr"].id)
+    await test_client.post(f"/api/v1/collections/{cid}/metrics/{mid}")
+
+    r = await test_client.get(f"/api/v1/metrics?collection_id={cid}")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["name"] == "mrr"

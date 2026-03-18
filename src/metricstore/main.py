@@ -45,8 +45,6 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         initialize_auth_runtime()
-        # Initialize MCP interface once when the app starts.
-        setup_mcp(app)
         yield
 
     app = FastAPI(
@@ -87,6 +85,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": settings.app_version}
 
     app.include_router(api_router, prefix=settings.api_prefix)
+    setup_mcp(app)
 
     return app
 

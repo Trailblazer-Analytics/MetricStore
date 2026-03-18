@@ -53,3 +53,72 @@ async def test_mcp_tool_list(test_client) -> None:
         "get_collection_metrics",
     ]:
         assert tool in names
+
+
+# ── Custom tool REST endpoints ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_mcp_discover_metrics(test_client, seeded_db) -> None:
+    r = await test_client.get("/mcp/tools/discover_metrics")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tool"] == "discover_metrics"
+    assert body["count"] >= 8
+
+
+@pytest.mark.asyncio
+async def test_mcp_discover_metrics_with_search(test_client, seeded_db) -> None:
+    r = await test_client.get("/mcp/tools/discover_metrics?search=revenue")
+    assert r.status_code == 200
+    body = r.json()
+    assert any(item["name"] == "revenue" for item in body["items"])
+
+
+@pytest.mark.asyncio
+async def test_mcp_search_metrics(test_client, seeded_db) -> None:
+    r = await test_client.get("/mcp/tools/search_metrics?query=revenue")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tool"] == "search_metrics"
+    assert body["query"] == "revenue"
+    assert any(item["name"] == "revenue" for item in body["items"])
+
+
+@pytest.mark.asyncio
+async def test_mcp_get_metric_definition(test_client, seeded_db) -> None:
+    r = await test_client.get("/mcp/tools/get_metric_definition?metric_name=revenue")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tool"] == "get_metric_definition"
+    assert body["metric"]["name"] == "revenue"
+
+
+@pytest.mark.asyncio
+async def test_mcp_get_metric_sql(test_client, seeded_db) -> None:
+    r = await test_client.get("/mcp/tools/get_metric_sql?metric_name=revenue")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tool"] == "get_metric_sql"
+    assert body["metric_name"] == "revenue"
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_collections_empty(test_client) -> None:
+    r = await test_client.get("/mcp/tools/list_collections")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tool"] == "list_collections"
+    assert isinstance(body["items"], list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_get_collection_metrics_not_found(test_client) -> None:
+    r = await test_client.get(
+        "/mcp/tools/get_collection_metrics?collection_name=nonexistent"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 0
+    assert "not found" in body["context"].lower()
+
