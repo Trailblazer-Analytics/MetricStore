@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: metricstore
+      POSTGRES_PASSWORD: metricstore
+      POSTGRES_DB: metricstore
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metricstore -d metricstore"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Overrides .env so the container reaches the postgres service by name
+      DATABASE_URL: postgresql+asyncpg://metricstore:metricstore@postgres:5432/metricstore
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount src/ for hot-reload during development
+      - ./src:/app/src
+    command: uvicorn src.metricstore.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
