@@ -250,6 +250,27 @@ docker compose up -d --build
 
 For production, remove dev reload flags and pin image tags.
 
+## Release Checklist
+
+Use this checklist when shipping a new public release.
+
+1. Ensure `main` is green:
+	- CI passes (`test` + `lint`)
+	- `ruff check .` and `pytest -q` pass locally (or known integration-test caveats are documented)
+2. Merge the open "Release Please" PR (or wait for it to be created after merge commits land on `main`).
+	- This updates version files and `CHANGELOG.md`.
+3. Confirm a new Git tag (`vX.Y.Z`) is created.
+	- Tag push triggers `.github/workflows/release.yml`.
+4. Verify release artifacts:
+	- GitHub Release entry is published
+	- Docker image is available at `ghcr.io/trailblazer-analytics/metricstore:X.Y.Z`
+	- Optional: PyPI publish job ran (when `PYPI_PUBLISH=true`)
+5. Smoke test the release:
+	- `docker pull ghcr.io/trailblazer-analytics/metricstore:X.Y.Z`
+	- `docker compose up -d`
+	- Open `http://localhost:8000/health` and `http://localhost:8000/docs`
+6. Announce the release and link the changelog section.
+
 ## Contributing
 
 See CONTRIBUTING.md for full setup and workflow.
