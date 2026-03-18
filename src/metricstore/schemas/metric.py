@@ -7,10 +7,17 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
-
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 # ── Supporting schemas ────────────────────────────────────────────────────────
+
 
 class DimensionSchema(BaseModel):
     name: str
@@ -27,6 +34,7 @@ class FilterSchema(BaseModel):
 
 
 # ── Base ──────────────────────────────────────────────────────────────────────
+
 
 class MetricBase(BaseModel):
     name: str = Field(..., pattern=r"^[a-z][a-z0-9_]*$")
@@ -61,11 +69,13 @@ class MetricBase(BaseModel):
 
 # ── Create ────────────────────────────────────────────────────────────────────
 
+
 class MetricCreate(MetricBase):
     """All fields from MetricBase; `name` is required."""
 
 
 # ── Partial update ────────────────────────────────────────────────────────────
+
 
 class MetricUpdate(BaseModel):
     """
@@ -98,7 +108,7 @@ class MetricUpdate(BaseModel):
     deprecated_reason: str | None = None
 
     @model_validator(mode="after")
-    def default_grain_consistent(self) -> "MetricUpdate":
+    def default_grain_consistent(self) -> MetricUpdate:
         if (
             self.default_time_grain is not None
             and self.time_grains is not None
@@ -113,6 +123,7 @@ class MetricUpdate(BaseModel):
 
 # ── Response ──────────────────────────────────────────────────────────────────
 
+
 class MetricResponse(MetricBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -122,6 +133,7 @@ class MetricResponse(MetricBase):
 
 
 # ── Summary (list endpoints) ──────────────────────────────────────────────────
+
 
 class MetricSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -146,6 +158,7 @@ class MetricSummary(BaseModel):
 
 # ── Paginated list ────────────────────────────────────────────────────────────
 
+
 class MetricList(BaseModel):
     items: list[MetricSummary]
     total: int
@@ -156,7 +169,7 @@ class MetricList(BaseModel):
     @classmethod
     def build(
         cls, items: list[MetricSummary], total: int, page: int, page_size: int
-    ) -> "MetricList":
+    ) -> MetricList:
         return cls(
             items=items,
             total=total,

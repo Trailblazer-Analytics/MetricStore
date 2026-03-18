@@ -169,17 +169,22 @@ class MetricService:
             setattr(metric, field, getattr(data, field))
 
         # Determine next version number
-        max_version: int = await self.session.scalar(
-            select(func.max(MetricVersion.version_number)).where(
-                MetricVersion.metric_id == metric_id
+        max_version: int = (
+            await self.session.scalar(
+                select(func.max(MetricVersion.version_number)).where(
+                    MetricVersion.metric_id == metric_id
+                )
             )
-        ) or 0
+            or 0
+        )
 
         version = MetricVersion(
             metric_id=metric.id,
             version_number=max_version + 1,
             snapshot=self._build_snapshot(metric),
-            change_summary=f"Updated fields: {', '.join(sorted(data.model_fields_set))}",
+            change_summary=(
+                f"Updated fields: {', '.join(sorted(data.model_fields_set))}"
+            ),
         )
         self.session.add(version)
         await self.session.commit()
@@ -206,9 +211,7 @@ class MetricService:
         )
         return list(result.all())
 
-    async def get_version(
-        self, metric_id: UUID, version_number: int
-    ) -> MetricVersion:
+    async def get_version(self, metric_id: UUID, version_number: int) -> MetricVersion:
         """Return a specific version. Raises 404 if metric or version not found."""
         await self.get_metric(metric_id)  # validate metric exists
         version = await self.session.scalar(
@@ -220,9 +223,7 @@ class MetricService:
         if version is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=(
-                    f"Version {version_number} of metric '{metric_id}' not found."
-                ),
+                detail=(f"Version {version_number} of metric '{metric_id}' not found."),
             )
         return version
 

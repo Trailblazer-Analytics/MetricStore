@@ -3,14 +3,7 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
-
-# Import settings *after* prepend_sys_path is applied by alembic.ini
-from metricstore.config import settings
-
-# Import Base from its canonical location
-from metricstore.models.base import Base
 
 # Import every model module so their tables are registered on Base.metadata
 # before autogenerate inspects it. Order matters: leaf models first.
@@ -18,6 +11,13 @@ import metricstore.models.collection  # noqa: F401
 import metricstore.models.metric  # noqa: F401
 import metricstore.models.metric_collection  # noqa: F401
 import metricstore.models.metric_version  # noqa: F401
+from alembic import context
+
+# Import settings *after* prepend_sys_path is applied by alembic.ini
+from metricstore.config import settings
+
+# Import Base from its canonical location
+from metricstore.models.base import Base
 
 # ---------------------------------------------------------------------------
 # Alembic Config object

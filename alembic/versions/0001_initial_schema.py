@@ -14,8 +14,9 @@ Creates all core tables for MetricStore v0.1:
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # ── Revision identifiers ──────────────────────────────────────────────────────
 revision: str = "0001"
@@ -215,13 +216,9 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["metric_id"], ["metrics.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["metric_id"], ["metrics.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "metric_id", "version_number", name="uq_metric_version"
-        ),
+        sa.UniqueConstraint("metric_id", "version_number", name="uq_metric_version"),
     )
     op.create_index("ix_metric_versions_metric_id", "metric_versions", ["metric_id"])
 
@@ -239,9 +236,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["collection_id"], ["collections.id"], ondelete="CASCADE"
         ),
-        sa.ForeignKeyConstraint(
-            ["metric_id"], ["metrics.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["metric_id"], ["metrics.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("metric_id", "collection_id"),
     )
 

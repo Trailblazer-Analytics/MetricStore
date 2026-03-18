@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from metricstore.models.base import Base
+
+if TYPE_CHECKING:
+    from metricstore.models.collection import Collection
+    from metricstore.models.metric import Metric
 
 
 class MetricCollection(Base):

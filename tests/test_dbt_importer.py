@@ -6,7 +6,6 @@ import pytest
 
 from metricstore.importers.dbt_importer import DbtImporter
 
-
 REALISTIC_DBT_YAML = """
 semantic_models:
   - name: orders
@@ -117,7 +116,9 @@ def test_parse_realistic_multi_model_dbt_yaml() -> None:
     assert len(revenue.filters) == 1
     assert revenue.filters[0].dimension == "__raw_filter__"
     assert "is_completed" in str(revenue.filters[0].value)
-    assert any(d.name == "order_date" and d.type == "temporal" for d in revenue.dimensions)
+    assert any(
+        d.name == "order_date" and d.type == "temporal" for d in revenue.dimensions
+    )
     assert any(d.name == "region" for d in revenue.dimensions)
 
 

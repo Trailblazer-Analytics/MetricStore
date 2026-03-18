@@ -3,7 +3,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,7 +23,9 @@ _OPENAPI_TAGS = [
     },
     {
         "name": "collections",
-        "description": "Named groupings of metrics for organisational or thematic purposes.",
+        "description": (
+            "Named groupings of metrics for organisational or thematic purposes."
+        ),
     },
     {
         "name": "import/export",

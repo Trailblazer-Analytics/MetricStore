@@ -57,18 +57,24 @@ class CollectionService:
 
     async def get_metric_count(self, collection_id: UUID) -> int:
         """Return the number of metrics in a collection."""
-        return await self.session.scalar(
-            select(func.count())
-            .select_from(MetricCollection)
-            .where(MetricCollection.collection_id == collection_id)
-        ) or 0
+        return (
+            await self.session.scalar(
+                select(func.count())
+                .select_from(MetricCollection)
+                .where(MetricCollection.collection_id == collection_id)
+            )
+            or 0
+        )
 
     # ── Membership management ─────────────────────────────────────────────────
 
     async def add_metric_to_collection(
         self, collection_id: UUID, metric_id: UUID
     ) -> None:
-        """Add a metric to a collection. Raises 404 for either entity, 409 if already linked."""
+        """Add a metric to a collection.
+
+        Raises 404 for either entity, 409 if already linked.
+        """
         # Validate both entities exist
         await self.get_collection(collection_id)
         metric = await self.session.get(Metric, metric_id)

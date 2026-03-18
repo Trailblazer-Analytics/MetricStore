@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write  # for PyPI trusted publishing
+
+jobs:
+  # ── Build & push Docker image to ghcr.io ──────────────────────────────────
+  docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      version: ${{ steps.version.outputs.value }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/metricstore
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=MetricStore
+            org.opencontainers.image.description=Governed business metrics catalog with REST API and MCP server
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Set up QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Build Python distribution ──────────────────────────────────────────────
+  build-python:
+    name: Build Python Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install --upgrade build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # ── Publish to PyPI (optional — set PYPI_PUBLISH=true secret to enable) ──
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build-python
+    runs-on: ubuntu-latest
+    if: ${{ vars.PYPI_PUBLISH == 'true' }}
+    environment:
+      name: pypi
+      url: https://pypi.org/project/metricstore/
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Uses OIDC trusted publishing — no API token needed.
+        # Configure under repo Settings > Environments > pypi.
+
+  # ── Create GitHub Release ──────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: [docker, build-python]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for changelog
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Generate changelog
+        id: changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --current --strip header
+        continue-on-error: true  # changelog is best-effort
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MetricStore ${{ github.ref_name }}
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.content || 'See commit history for changes.' }}
+
+            ## Docker
+
+            ```bash
+            docker pull ghcr.io/${{ github.repository_owner }}/metricstore:${{ github.ref_name }}
+            ```
+
+            ## Quick Start
+
+            ```bash
+            curl -o docker-compose.yml \
+              https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
+            docker compose up -d
+            ```
+
+            Full documentation: https://github.com/${{ github.repository }}#readme
+          files: dist/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true

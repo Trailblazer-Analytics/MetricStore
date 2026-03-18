@@ -3,18 +3,28 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
+from metricstore.config import settings
 from metricstore.dependencies import get_metric_service
 from metricstore.exporters import DbtExporter, JsonExporter, OsiExporter, YamlExporter
 from metricstore.importers import DbtImporter, MetricStoreYamlImporter
-from metricstore.config import settings
 from metricstore.schemas.common import ImportResult
 from metricstore.schemas.metric import (
     MetricCreate,
@@ -40,6 +50,7 @@ class ExportFilter(BaseModel):
 
 # ── POST /metrics ─────────────────────────────────────────────────────────────
 
+
 @router.post(
     "",
     response_model=MetricResponse,
@@ -56,6 +67,7 @@ async def create_metric(
 
 
 # ── POST /metrics/export  (must be registered before /{metric_id_or_name}) ───
+
 
 @router.post(
     "/export",
@@ -96,46 +108,42 @@ async def export_metrics(
         MetricResponse.model_validate(m).model_dump(mode="json") for m in metrics
     ]
 
-    now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    now = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     if fmt == "json":
         content = JsonExporter().export(data, settings.app_version)
+        filename = f"metricstore_export_{now}.json"
         return Response(
             content=content,
             media_type="application/json",
-            headers={
-                "Content-Disposition": f'attachment; filename="metricstore_export_{now}.json"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     if fmt == "yaml":
         content = YamlExporter().export(data, settings.app_version)
+        filename = f"metricstore_export_{now}.yaml"
         return PlainTextResponse(
             content,
             media_type="application/yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="metricstore_export_{now}.yaml"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     if fmt == "osi":
         content = OsiExporter().export(data, settings.app_version)
+        filename = f"metricstore_osi_export_{now}.yaml"
         return PlainTextResponse(
             content,
             media_type="application/yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="metricstore_osi_export_{now}.yaml"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     if fmt == "dbt":
         content = DbtExporter().export(data, settings.app_version)
+        filename = f"metricstore_dbt_export_{now}.yaml"
         return PlainTextResponse(
             content,
             media_type="application/yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="metricstore_dbt_export_{now}.yaml"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     raise HTTPException(
@@ -145,6 +153,7 @@ async def export_metrics(
 
 
 # ── POST /metrics/import ──────────────────────────────────────────────────────
+
 
 @router.post(
     "/import",
@@ -157,8 +166,12 @@ async def export_metrics(
     },
 )
 async def import_metrics(
-    files: list[UploadFile] | None = File(default=None, description="One or more files"),
-    file: UploadFile | None = File(default=None, description="Single file (legacy clients)"),
+    files: list[UploadFile] | None = File(
+        default=None, description="One or more files"
+    ),
+    file: UploadFile | None = File(
+        default=None, description="Single file (legacy clients)"
+    ),
     fmt: str = Query(
         "metricstore",
         alias="format",
@@ -221,16 +234,21 @@ async def import_metrics(
         try:
             existing = await svc.get_metric_by_name(data.name)
             patch_data = data.model_dump(exclude={"name"})
-            await svc.update_metric(existing.id, MetricUpdate.model_validate(patch_data))
+            await svc.update_metric(
+                existing.id, MetricUpdate.model_validate(patch_data)
+            )
             updated += 1
         except Exception as exc:
             skipped += 1
             errors.append(f"{data.name}: failed to update existing metric ({exc})")
 
-    return ImportResult(imported=imported, updated=updated, skipped=skipped, errors=errors)
+    return ImportResult(
+        imported=imported, updated=updated, skipped=skipped, errors=errors
+    )
 
 
 # ── GET /metrics ──────────────────────────────────────────────────────────────
+
 
 @router.get(
     "",
@@ -240,7 +258,9 @@ async def import_metrics(
 async def list_metrics(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: str | None = Query(None, description="Full-text search across name and description"),
+    search: str | None = Query(
+        None, description="Full-text search across name and description"
+    ),
     tags: str | None = Query(None, description="Comma-separated tag names"),
     status: str | None = Query(None),
     metric_type: str | None = Query(None),
@@ -265,6 +285,7 @@ async def list_metrics(
 
 # ── GET /metrics/{metric_id_or_name} ─────────────────────────────────────────
 
+
 @router.get(
     "/{metric_id_or_name}",
     response_model=MetricResponse,
@@ -284,11 +305,15 @@ async def get_metric(
 
 # ── PUT /metrics/{metric_id} ──────────────────────────────────────────────────
 
+
 @router.put(
     "/{metric_id}",
     response_model=MetricResponse,
     summary="Update a metric",
-    responses={404: {"description": "Not found"}, 409: {"description": "Name conflict"}},
+    responses={
+        404: {"description": "Not found"},
+        409: {"description": "Name conflict"},
+    },
 )
 async def update_metric(
     metric_id: UUID,
@@ -300,6 +325,7 @@ async def update_metric(
 
 
 # ── DELETE /metrics/{metric_id} ───────────────────────────────────────────────
+
 
 @router.delete(
     "/{metric_id}",
@@ -316,6 +342,7 @@ async def delete_metric(
 
 # ── GET /metrics/{metric_id}/versions ─────────────────────────────────────────
 
+
 @router.get(
     "/{metric_id}/versions",
     response_model=VersionList,
@@ -331,6 +358,7 @@ async def list_versions(
 
 
 # ── GET /metrics/{metric_id}/versions/{version_number} ────────────────────────
+
 
 @router.get(
     "/{metric_id}/versions/{version_number}",

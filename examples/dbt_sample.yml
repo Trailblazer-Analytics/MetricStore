@@ -1,0 +1,194 @@
+# dbt MetricFlow sample — importable by MetricStore's dbt importer
+# ─────────────────────────────────────────────────────────────────────────────
+# Import with:
+#   curl -X POST http://localhost:8000/api/v1/metrics/import/dbt \
+#        -H "Content-Type: application/yaml" \
+#        --data-binary @examples/dbt_sample.yml
+# ─────────────────────────────────────────────────────────────────────────────
+version: 2
+
+semantic_models:
+  - name: orders
+    description: Order facts joined with customer and product dimensions
+    model: ref('fct_orders')
+    defaults:
+      agg_time_dimension: order_date
+
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+      - name: product
+        type: foreign
+        expr: product_id
+
+    dimensions:
+      - name: order_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: region
+        type: categorical
+        expr: customer_region
+      - name: channel
+        type: categorical
+        expr: acquisition_channel
+      - name: product_category
+        type: categorical
+        expr: product_line
+
+    measures:
+      - name: order_total
+        description: Gross order value before discounts
+        agg: sum
+        expr: order_total_usd
+      - name: order_count
+        description: Number of completed orders
+        agg: count_distinct
+        expr: order_id
+      - name: discount_amount
+        description: Total discount applied
+        agg: sum
+        expr: discount_usd
+
+  - name: subscriptions
+    description: Subscription lifecycle with MRR contributions
+    model: ref('fct_subscriptions')
+    defaults:
+      agg_time_dimension: billing_date
+
+    entities:
+      - name: subscription
+        type: primary
+        expr: subscription_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+
+    dimensions:
+      - name: billing_date
+        type: time
+        type_params:
+          time_granularity: month
+      - name: plan_tier
+        type: categorical
+        expr: plan_name
+      - name: billing_period
+        type: categorical
+        expr: billing_cadence
+
+    measures:
+      - name: mrr_amount
+        description: Normalized monthly recurring revenue contribution
+        agg: sum
+        expr: mrr_usd
+      - name: active_subscriptions
+        description: Count of active subscriptions
+        agg: count_distinct
+        expr: subscription_id
+        filter: "{{ Dimension('subscription__status') }} = 'active'"
+
+metrics:
+  # ── Simple revenue metrics ────────────────────────────────────────────────
+
+  - name: revenue
+    description: Total recognized order revenue
+    type: simple
+    label: Total Revenue
+    type_params:
+      measure: order_total
+    filter: "{{ Dimension('order__status') }} = 'completed'"
+    meta:
+      owner: finance-team
+      tags: [revenue, financial, core]
+
+  - name: order_count
+    description: Number of completed orders
+    type: simple
+    label: Order Count
+    type_params:
+      measure: order_count
+    filter: "{{ Dimension('order__status') }} = 'completed'"
+    meta:
+      owner: product-team
+      tags: [product, orders]
+
+  - name: average_order_value
+    description: Average revenue per completed order
+    type: simple
+    label: Average Order Value
+    type_params:
+      measure: order_total
+    filter: "{{ Dimension('order__status') }} = 'completed'"
+    meta:
+      owner: finance-team
+      tags: [revenue, financial]
+
+  # ── MRR / ARR ─────────────────────────────────────────────────────────────
+
+  - name: mrr
+    description: Monthly Recurring Revenue from active subscriptions
+    type: simple
+    label: MRR
+    type_params:
+      measure: mrr_amount
+    meta:
+      owner: finance-team
+      tags: [revenue, saas, recurring, core]
+
+  - name: active_subscriptions
+    description: Count of active paid subscriptions
+    type: simple
+    label: Active Subscriptions
+    type_params:
+      measure: active_subscriptions
+    meta:
+      owner: growth-team
+      tags: [growth, saas]
+
+  # ── Ratio metrics ─────────────────────────────────────────────────────────
+
+  - name: discount_rate
+    description: >-
+      Percentage of gross order value given as discount.
+      High values may indicate price-pressure or over-use of coupons.
+    type: ratio
+    label: Discount Rate
+    type_params:
+      numerator: discount_amount
+      denominator: order_total
+    meta:
+      owner: finance-team
+      tags: [revenue, pricing]
+
+  # ── Cumulative metrics ────────────────────────────────────────────────────
+
+  - name: cumulative_revenue
+    description: Running total of all-time recognized revenue
+    type: cumulative
+    label: Cumulative Revenue
+    type_params:
+      measure: order_total
+      cumulation_window:
+        count: 365
+        granularity: day
+    meta:
+      owner: finance-team
+      tags: [revenue, financial]
+
+  # ── Derived metric ────────────────────────────────────────────────────────
+
+  - name: arr
+    description: Annualized MRR (MRR × 12)
+    type: derived
+    label: ARR
+    type_params:
+      expr: "mrr * 12"
+      metrics:
+        - name: mrr
+    meta:
+      owner: finance-team
+      tags: [revenue, saas, recurring, core]

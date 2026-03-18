@@ -31,7 +31,9 @@ class MetricStoreYamlImporter:
         out: list[MetricCreate] = []
         for i, row in enumerate(metrics):
             if not isinstance(row, dict):
-                raise ValueError(f"Malformed MetricStore YAML: metrics[{i}] must be an object")
+                raise ValueError(
+                    f"Malformed MetricStore YAML: metrics[{i}] must be an object"
+                )
 
             normalized: dict[str, Any] = dict(row)
             if normalized.get("description") == "":

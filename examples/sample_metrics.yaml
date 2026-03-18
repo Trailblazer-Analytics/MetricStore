@@ -1,0 +1,551 @@
+# MetricStore Sample Metrics
+# ─────────────────────────────────────────────────────────────────────────────
+# 20 realistic business metrics across Revenue, Growth, Product, Marketing,
+# and Finance domains. Import with:
+#
+#   curl -X POST http://localhost:8000/api/v1/metrics/import/yaml \
+#        -H "Content-Type: application/yaml" \
+#        --data-binary @examples/sample_metrics.yaml
+#
+# Or via the quick-start script:  bash scripts/quickstart.sh
+# ─────────────────────────────────────────────────────────────────────────────
+
+metrics:
+  # ── Revenue ────────────────────────────────────────────────────────────────
+
+  - name: revenue
+    display_name: Total Revenue
+    description: >-
+      Total recognized revenue across all products and channels in the
+      reporting period. Excludes refunds and chargebacks.
+    type: simple
+    status: active
+    formula: "SUM(order_items.unit_price * order_items.quantity)"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', o.completed_at) AS period,
+        SUM(oi.unit_price * oi.quantity)    AS revenue
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status = 'completed'
+      GROUP BY 1
+    unit: USD
+    owner: finance-team
+    tags: [revenue, financial, core]
+    dimensions:
+      - name: product_line
+        type: categorical
+        description: Product line (SaaS, Professional Services, Support)
+      - name: region
+        type: categorical
+        description: Geographic region (AMER, EMEA, APAC)
+      - name: channel
+        type: categorical
+        description: Sales channel (direct, channel-partner, self-serve)
+      - name: period
+        type: time
+        description: Revenue recognition period
+
+  - name: mrr
+    display_name: Monthly Recurring Revenue
+    description: >-
+      Sum of normalized monthly subscription revenue from all active
+      subscriptions. One-time fees and usage-based charges are excluded.
+    type: simple
+    status: active
+    formula: "SUM(subscriptions.mrr_amount)"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', s.billing_anchor_date) AS period,
+        SUM(s.mrr_amount)                           AS mrr
+      FROM subscriptions s
+      WHERE s.status = 'active'
+      GROUP BY 1
+    unit: USD
+    owner: finance-team
+    tags: [revenue, saas, recurring, core]
+    dimensions:
+      - name: plan_tier
+        type: categorical
+        description: Subscription plan tier (starter, growth, enterprise)
+      - name: billing_period
+        type: categorical
+        description: Billing cadence (monthly, annual)
+      - name: period
+        type: time
+        description: MRR snapshot month
+
+  - name: arr
+    display_name: Annual Recurring Revenue
+    description: >-
+      MRR × 12. A forward-looking annualization of current subscription
+      revenue; does not account for churn or expansion.
+    type: derived
+    status: active
+    formula: "mrr * 12"
+    sql_expression: |
+      SELECT period, mrr * 12 AS arr
+      FROM (
+        SELECT DATE_TRUNC('month', s.billing_anchor_date) AS period,
+               SUM(s.mrr_amount) AS mrr
+        FROM subscriptions s
+        WHERE s.status = 'active'
+        GROUP BY 1
+      ) mrr_base
+    unit: USD
+    owner: finance-team
+    tags: [revenue, saas, recurring, core]
+    dimensions:
+      - name: plan_tier
+        type: categorical
+      - name: period
+        type: time
+
+  - name: net_revenue_retention
+    display_name: Net Revenue Retention (NRR)
+    description: >-
+      Revenue retained from the previous period's cohort, including
+      expansion (upsells) and net of contraction and churn. Expressed
+      as a percentage. Values above 100 % indicate net expansion.
+    type: ratio
+    status: active
+    formula: "(end_mrr / beginning_mrr) * 100"
+    sql_expression: |
+      WITH cohort AS (
+        SELECT
+          customer_id,
+          DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month') AS cohort_month,
+          SUM(mrr_amount) AS beginning_mrr
+        FROM subscriptions
+        WHERE status = 'active'
+          AND DATE_TRUNC('month', created_at) <=
+              DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+        GROUP BY 1, 2
+      ),
+      current_state AS (
+        SELECT customer_id, SUM(mrr_amount) AS ending_mrr
+        FROM subscriptions
+        WHERE status = 'active'
+        GROUP BY 1
+      )
+      SELECT
+        SUM(cs.ending_mrr) / NULLIF(SUM(c.beginning_mrr), 0) * 100 AS nrr
+      FROM cohort c
+      LEFT JOIN current_state cs USING (customer_id)
+    unit: "%"
+    owner: finance-team
+    tags: [revenue, retention, saas, health]
+    dimensions:
+      - name: plan_tier
+        type: categorical
+      - name: cohort_month
+        type: time
+
+  # ── Growth ──────────────────────────────────────────────────────────────────
+
+  - name: customer_count
+    display_name: Active Customers
+    description: Number of unique accounts with at least one active subscription.
+    type: simple
+    status: active
+    formula: "COUNT(DISTINCT customer_id)"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', snapshot_date) AS period,
+        COUNT(DISTINCT customer_id)        AS customer_count
+      FROM subscriptions
+      WHERE status = 'active'
+      GROUP BY 1
+    unit: count
+    owner: growth-team
+    tags: [growth, customers, core]
+    dimensions:
+      - name: plan_tier
+        type: categorical
+      - name: region
+        type: categorical
+      - name: period
+        type: time
+
+  - name: new_customers
+    display_name: New Customers
+    description: >-
+      Customers who started their first-ever subscription in the reporting
+      period. Reactivations are excluded.
+    type: simple
+    status: active
+    formula: "COUNT(DISTINCT customer_id) WHERE is_first_subscription = true"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', s.started_at) AS period,
+        COUNT(DISTINCT s.customer_id)     AS new_customers
+      FROM subscriptions s
+      WHERE s.is_first_subscription = true
+      GROUP BY 1
+    unit: count
+    owner: growth-team
+    tags: [growth, acquisition, customers]
+    dimensions:
+      - name: acquisition_channel
+        type: categorical
+        description: Marketing channel that sourced the customer
+      - name: plan_tier
+        type: categorical
+      - name: region
+        type: categorical
+      - name: period
+        type: time
+
+  - name: churn_rate
+    display_name: Monthly Churn Rate
+    description: >-
+      Percentage of customers at the start of the month who cancelled
+      before the end of the month.
+    type: ratio
+    status: active
+    formula: "(churned_customers / beginning_customers) * 100"
+    sql_expression: |
+      WITH monthly AS (
+        SELECT
+          DATE_TRUNC('month', event_date) AS period,
+          COUNT(DISTINCT CASE WHEN event_type = 'cancelled'
+                         THEN customer_id END) AS churned,
+          COUNT(DISTINCT CASE WHEN event_type = 'active_start_of_month'
+                         THEN customer_id END) AS beginning
+        FROM subscription_events
+        GROUP BY 1
+      )
+      SELECT period, churned / NULLIF(beginning, 0)::float * 100 AS churn_rate
+      FROM monthly
+    unit: "%"
+    owner: growth-team
+    tags: [growth, churn, health, saas]
+    dimensions:
+      - name: plan_tier
+        type: categorical
+      - name: cancellation_reason
+        type: categorical
+      - name: period
+        type: time
+
+  # ── Product ─────────────────────────────────────────────────────────────────
+
+  - name: dau
+    display_name: Daily Active Users (DAU)
+    description: >-
+      Unique users who performed at least one meaningful product action on
+      a given day. "Meaningful" excludes automated pings and health checks.
+    type: simple
+    status: active
+    formula: "COUNT(DISTINCT user_id) WHERE action_type NOT IN ('ping', 'health_check')"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('day', e.occurred_at) AS period,
+        COUNT(DISTINCT e.user_id)        AS dau
+      FROM product_events e
+      WHERE e.action_type NOT IN ('ping', 'health_check')
+      GROUP BY 1
+    unit: count
+    owner: product-team
+    tags: [product, engagement, core]
+    dimensions:
+      - name: platform
+        type: categorical
+        description: Web, iOS, Android, API
+      - name: feature_area
+        type: categorical
+      - name: period
+        type: time
+
+  - name: mau
+    display_name: Monthly Active Users (MAU)
+    description: >-
+      Unique users who were active at least once in the calendar month.
+    type: simple
+    status: active
+    formula: "COUNT(DISTINCT user_id)"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', e.occurred_at) AS period,
+        COUNT(DISTINCT e.user_id)          AS mau
+      FROM product_events e
+      WHERE e.action_type NOT IN ('ping', 'health_check')
+      GROUP BY 1
+    unit: count
+    owner: product-team
+    tags: [product, engagement, core]
+    dimensions:
+      - name: platform
+        type: categorical
+      - name: period
+        type: time
+
+  - name: conversion_rate
+    display_name: Trial-to-Paid Conversion Rate
+    description: >-
+      Percentage of trial accounts that converted to a paid subscription
+      within the trial window.
+    type: ratio
+    status: active
+    formula: "(converted_trials / started_trials) * 100"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', t.started_at) AS cohort_month,
+        COUNT(DISTINCT CASE WHEN t.converted_at IS NOT NULL
+                       THEN t.account_id END)::float /
+        NULLIF(COUNT(DISTINCT t.account_id), 0) * 100 AS conversion_rate
+      FROM trials t
+      GROUP BY 1
+    unit: "%"
+    owner: product-team
+    tags: [product, conversion, growth]
+    dimensions:
+      - name: plan_tier_converted_to
+        type: categorical
+      - name: acquisition_channel
+        type: categorical
+      - name: cohort_month
+        type: time
+
+  - name: nps_score
+    display_name: Net Promoter Score
+    description: >-
+      Percentage of Promoters (9–10) minus percentage of Detractors (0–6)
+      among survey respondents in the period.
+    type: derived
+    status: active
+    formula: "((promoters - detractors) / total_respondents) * 100"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', responded_at) AS period,
+        (
+          COUNT(CASE WHEN score >= 9 THEN 1 END)::float -
+          COUNT(CASE WHEN score <= 6 THEN 1 END)::float
+        ) / NULLIF(COUNT(*), 0) * 100 AS nps_score
+      FROM nps_responses
+      GROUP BY 1
+    unit: "score (-100–100)"
+    owner: product-team
+    tags: [product, satisfaction, nps]
+    dimensions:
+      - name: customer_segment
+        type: categorical
+      - name: product_area
+        type: categorical
+      - name: period
+        type: time
+
+  # ── Marketing ───────────────────────────────────────────────────────────────
+
+  - name: cac
+    display_name: Customer Acquisition Cost (CAC)
+    description: >-
+      Total sales and marketing spend divided by the number of new
+      customers acquired in the period.
+    type: ratio
+    status: active
+    formula: "total_s_and_m_spend / new_customers"
+    sql_expression: |
+      SELECT
+        s.period,
+        s.spend / NULLIF(c.new_customers, 0) AS cac
+      FROM (
+        SELECT DATE_TRUNC('month', spend_date) AS period,
+               SUM(amount) AS spend
+        FROM marketing_spend
+        GROUP BY 1
+      ) s
+      JOIN (
+        SELECT DATE_TRUNC('month', started_at) AS period,
+               COUNT(DISTINCT customer_id) AS new_customers
+        FROM subscriptions
+        WHERE is_first_subscription = true
+        GROUP BY 1
+      ) c USING (period)
+    unit: USD
+    owner: marketing-team
+    tags: [marketing, acquisition, efficiency]
+    dimensions:
+      - name: channel
+        type: categorical
+      - name: region
+        type: categorical
+      - name: period
+        type: time
+
+  - name: ltv
+    display_name: Customer Lifetime Value (LTV)
+    description: >-
+      Predicted total revenue from an average customer over their
+      entire relationship. Calculated as ARPU / churn_rate.
+    type: derived
+    status: active
+    formula: "arpu / churn_rate"
+    sql_expression: |
+      SELECT
+        period,
+        arpu / NULLIF(churn_rate / 100.0, 0) AS ltv
+      FROM (
+        SELECT
+          DATE_TRUNC('month', snapshot_date) AS period,
+          SUM(mrr_amount) / NULLIF(COUNT(DISTINCT customer_id), 0) AS arpu,
+          -- inline churn rate
+          COUNT(DISTINCT CASE WHEN churned_this_month THEN customer_id END)::float /
+          NULLIF(COUNT(DISTINCT customer_id), 0) * 100 AS churn_rate
+        FROM subscription_snapshots
+        GROUP BY 1
+      ) base
+    unit: USD
+    owner: marketing-team
+    tags: [marketing, ltv, customers]
+    dimensions:
+      - name: plan_tier
+        type: categorical
+      - name: acquisition_channel
+        type: categorical
+      - name: period
+        type: time
+
+  - name: ltv_to_cac_ratio
+    display_name: LTV:CAC Ratio
+    description: >-
+      Ratio of Customer Lifetime Value to Customer Acquisition Cost.
+      Values above 3× indicate a healthy acquisition model.
+    type: ratio
+    status: active
+    formula: "ltv / cac"
+    sql_expression: |
+      SELECT period, ltv / NULLIF(cac, 0) AS ltv_to_cac_ratio
+      FROM ltv_cac_combined_view
+    unit: "ratio"
+    owner: marketing-team
+    tags: [marketing, efficiency, health, core]
+    dimensions:
+      - name: channel
+        type: categorical
+      - name: period
+        type: time
+
+  # ── Finance ──────────────────────────────────────────────────────────────────
+
+  - name: gross_margin
+    display_name: Gross Margin
+    description: >-
+      (Revenue − Cost of Goods Sold) / Revenue, expressed as a percentage.
+      COGS includes hosting, support, and third-party costs directly
+      attributable to delivering the product.
+    type: ratio
+    status: active
+    formula: "((revenue - cogs) / revenue) * 100"
+    sql_expression: |
+      SELECT
+        period,
+        (revenue - cogs) / NULLIF(revenue, 0) * 100 AS gross_margin
+      FROM financial_summary
+    unit: "%"
+    owner: finance-team
+    tags: [finance, profitability, core]
+    dimensions:
+      - name: product_line
+        type: categorical
+      - name: region
+        type: categorical
+      - name: period
+        type: time
+
+  - name: burn_rate
+    display_name: Net Cash Burn Rate
+    description: >-
+      Net decrease in cash balances per month.  Positive values indicate
+      the company is burning cash; negative values indicate cash generation.
+    type: simple
+    status: active
+    formula: "beginning_cash_balance - ending_cash_balance"
+    sql_expression: |
+      SELECT
+        period,
+        LAG(cash_balance) OVER (ORDER BY period) - cash_balance AS burn_rate
+      FROM monthly_cash_balances
+    unit: USD
+    owner: finance-team
+    tags: [finance, cash, startup]
+    dimensions:
+      - name: period
+        type: time
+
+  - name: runway_months
+    display_name: Runway (Months)
+    description: >-
+      Current cash balance divided by average monthly net burn rate.
+      Indicates how many months of operations can be funded at the
+      current burn rate.
+    type: derived
+    status: active
+    formula: "cash_balance / avg_monthly_burn_rate"
+    sql_expression: |
+      SELECT
+        current_date                                      AS as_of_date,
+        latest.cash_balance / NULLIF(avg_burn.avg_burn, 0) AS runway_months
+      FROM (
+        SELECT cash_balance FROM monthly_cash_balances
+        ORDER BY period DESC LIMIT 1
+      ) latest,
+      (
+        SELECT AVG(burn_rate) AS avg_burn
+        FROM (
+          SELECT LAG(cash_balance) OVER (ORDER BY period) - cash_balance AS burn_rate
+          FROM monthly_cash_balances
+          ORDER BY period DESC LIMIT 3
+        ) recent
+      ) avg_burn
+    unit: months
+    owner: finance-team
+    tags: [finance, cash, startup, health]
+    dimensions: []
+
+  - name: operating_expenses
+    display_name: Total Operating Expenses (OpEx)
+    description: >-
+      Total operating costs excluding cost of goods sold.  Includes
+      R&D, Sales & Marketing, and G&A.
+    type: simple
+    status: active
+    formula: "SUM(expense_amount) WHERE expense_category IN ('rd', 'sales_marketing', 'ga')"
+    sql_expression: |
+      SELECT
+        DATE_TRUNC('month', expense_date) AS period,
+        SUM(amount)                        AS operating_expenses
+      FROM expenses
+      WHERE category IN ('rd', 'sales_marketing', 'ga')
+      GROUP BY 1
+    unit: USD
+    owner: finance-team
+    tags: [finance, expenses, operations]
+    dimensions:
+      - name: expense_category
+        type: categorical
+        description: rd, sales_marketing, ga
+      - name: department
+        type: categorical
+      - name: period
+        type: time
+
+  - name: rule_of_40
+    display_name: Rule of 40 Score
+    description: >-
+      Growth rate + profit margin.  Software companies are considered
+      healthy when this number exceeds 40.
+    type: derived
+    status: active
+    formula: "arr_growth_rate_pct + operating_margin_pct"
+    sql_expression: |
+      SELECT
+        period,
+        arr_yoy_growth + operating_margin AS rule_of_40
+      FROM saas_health_view
+    unit: score
+    owner: finance-team
+    tags: [finance, saas, health, executive]
+    dimensions:
+      - name: period
+        type: time

@@ -48,7 +48,9 @@ class DbtImporter:
         semantic_models = payload.get("semantic_models") or []
         metrics = payload.get("metrics") or []
 
-        measure_to_models, model_dimensions = self._build_semantic_indexes(semantic_models)
+        measure_to_models, model_dimensions = self._build_semantic_indexes(
+            semantic_models
+        )
 
         by_name: dict[str, MetricCreate] = {}
         for metric in metrics:
@@ -125,7 +127,9 @@ class DbtImporter:
 
             metric_def = MetricCreate.model_validate(data)
             if name in by_name:
-                logger.warning("Duplicate metric name '%s' found in manifest; last one wins.", name)
+                logger.warning(
+                    "Duplicate metric name '%s' found in manifest; last one wins.", name
+                )
             by_name[name] = metric_def
 
         return list(by_name.values())
@@ -206,13 +210,17 @@ class DbtImporter:
             for dim in sm.get("dimensions") or []:
                 if not isinstance(dim, dict) or not dim.get("name"):
                     continue
-                dim_type = self._DIM_TYPE_MAP.get(str(dim.get("type", "categorical")).lower(), "categorical")
+                dim_type = self._DIM_TYPE_MAP.get(
+                    str(dim.get("type", "categorical")).lower(), "categorical"
+                )
                 dims.append(
                     {
                         "name": dim.get("name"),
                         "description": dim.get("description") or None,
                         "type": dim_type,
-                        "time_grain": ((dim.get("type_params") or {}).get("time_granularity")),
+                        "time_grain": (
+                            (dim.get("type_params") or {}).get("time_granularity")
+                        ),
                     }
                 )
 

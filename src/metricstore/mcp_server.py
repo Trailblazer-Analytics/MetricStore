@@ -77,7 +77,9 @@ def _create_custom_mcp_router() -> APIRouter:
                 "display_name": m.display_name,
                 "description": m.description,
                 "metric_type": (
-                    m.metric_type.value if hasattr(m.metric_type, "value") else m.metric_type
+                    m.metric_type.value
+                    if hasattr(m.metric_type, "value")
+                    else m.metric_type
                 ),
                 "owner": m.owner,
                 "tags": m.tags,
@@ -112,7 +114,9 @@ def _create_custom_mcp_router() -> APIRouter:
         metric = await svc.get_metric_by_name(metric_name)
 
         dimensions = metric.dimensions or []
-        dim_names = [d.get("name") for d in dimensions if isinstance(d, dict) and d.get("name")]
+        dim_names = [
+            d.get("name") for d in dimensions if isinstance(d, dict) and d.get("name")
+        ]
 
         return {
             "tool": "get_metric_definition",
@@ -136,7 +140,9 @@ def _create_custom_mcp_router() -> APIRouter:
                 "source_platform": metric.source_platform,
                 "source_ref": metric.source_ref,
                 "tags": metric.tags,
-                "status": metric.status.value if hasattr(metric.status, "value") else metric.status,
+                "status": metric.status.value
+                if hasattr(metric.status, "value")
+                else metric.status,
                 "deprecated_reason": metric.deprecated_reason,
                 "meta": metric.meta,
             },
@@ -168,11 +174,15 @@ def _create_custom_mcp_router() -> APIRouter:
                 "name": m.name,
                 "description": m.description,
                 "metric_type": (
-                    m.metric_type.value if hasattr(m.metric_type, "value") else m.metric_type
+                    m.metric_type.value
+                    if hasattr(m.metric_type, "value")
+                    else m.metric_type
                 ),
                 "owner": m.owner,
                 "tags": m.tags,
-                "relevance": "high" if query.lower() in (m.name or "").lower() else "medium",
+                "relevance": "high"
+                if query.lower() in (m.name or "").lower()
+                else "medium",
             }
             for m in metrics
         ]
@@ -205,7 +215,9 @@ def _create_custom_mcp_router() -> APIRouter:
 
         chosen_grain = time_grain or metric.default_time_grain
         dimensions = metric.dimensions or []
-        dim_names = [d.get("name") for d in dimensions if isinstance(d, dict) and d.get("name")]
+        dim_names = [
+            d.get("name") for d in dimensions if isinstance(d, dict) and d.get("name")
+        ]
 
         return {
             "tool": "get_metric_sql",
@@ -252,7 +264,9 @@ def _create_custom_mcp_router() -> APIRouter:
             "tool": "list_collections",
             "count": len(items),
             "items": items,
-            "context": "Use get_collection_metrics to inspect metrics within one collection.",
+            "context": (
+                "Use get_collection_metrics to inspect metrics within one collection."
+            ),
         }
 
     @router.get(
@@ -293,7 +307,9 @@ def _create_custom_mcp_router() -> APIRouter:
                 "display_name": m.display_name,
                 "description": m.description,
                 "metric_type": (
-                    m.metric_type.value if hasattr(m.metric_type, "value") else m.metric_type
+                    m.metric_type.value
+                    if hasattr(m.metric_type, "value")
+                    else m.metric_type
                 ),
                 "owner": m.owner,
                 "tags": m.tags,

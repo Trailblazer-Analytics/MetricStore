@@ -6,7 +6,7 @@ interchange structure inspired by the evolving OSI initiative.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import StringIO
 
 from ruamel.yaml import YAML
@@ -23,7 +23,7 @@ class OsiExporter:
     }
 
     def export(self, metrics: list[dict], version: str) -> str:
-        generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
         osi_metrics: list[dict] = []
         for m in metrics:

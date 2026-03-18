@@ -15,6 +15,7 @@ router = APIRouter(prefix="/collections", tags=["collections"])
 
 # ── POST /collections ─────────────────────────────────────────────────────────
 
+
 @router.post(
     "",
     response_model=CollectionResponse,
@@ -32,6 +33,7 @@ async def create_collection(
 
 
 # ── GET /collections ──────────────────────────────────────────────────────────
+
 
 @router.get(
     "",
@@ -51,6 +53,7 @@ async def list_collections(
 
 # ── GET /collections/{collection_id} ──────────────────────────────────────────
 
+
 @router.get(
     "/{collection_id}",
     response_model=CollectionResponse,
@@ -68,11 +71,15 @@ async def get_collection(
 
 # ── POST /collections/{collection_id}/metrics/{metric_id} ────────────────────
 
+
 @router.post(
     "/{collection_id}/metrics/{metric_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Add a metric to a collection",
-    responses={404: {"description": "Collection or metric not found"}, 409: {"description": "Already in collection"}},
+    responses={
+        404: {"description": "Collection or metric not found"},
+        409: {"description": "Already in collection"},
+    },
 )
 async def add_metric_to_collection(
     collection_id: UUID,
@@ -83,6 +90,7 @@ async def add_metric_to_collection(
 
 
 # ── DELETE /collections/{collection_id}/metrics/{metric_id} ──────────────────
+
 
 @router.delete(
     "/{collection_id}/metrics/{metric_id}",
@@ -99,6 +107,7 @@ async def remove_metric_from_collection(
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
+
 
 def _to_response(collection: object, metric_count: int) -> CollectionResponse:
     return CollectionResponse(

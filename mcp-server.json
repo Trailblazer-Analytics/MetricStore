@@ -1,0 +1,84 @@
+{
+  "name": "metricstore",
+  "display_name": "MetricStore - Business Metrics Catalog",
+  "description": "Query and discover governed business metric definitions. Get metric formulas, SQL expressions, dimensions, and ownership info for use in AI-powered analytics.",
+  "version": "0.1.0",
+  "transport": {
+    "type": "sse",
+    "url": "http://localhost:8000/mcp"
+  },
+  "tools": [
+    {
+      "name": "discover_metrics",
+      "description": "List available business metrics with optional filtering by type, status, owner, or tags"
+    },
+    {
+      "name": "get_metric_definition",
+      "description": "Get complete metric definition including formula, SQL expression, dimensions, and ownership"
+    },
+    {
+      "name": "search_metrics",
+      "description": "Full-text search across metric names and descriptions"
+    },
+    {
+      "name": "get_metric_sql",
+      "description": "Get the SQL expression for a metric, ready to use in queries"
+    },
+    {
+      "name": "list_collections",
+      "description": "List metric collections (logical groups of related metrics)"
+    },
+    {
+      "name": "get_collection_metrics",
+      "description": "Get all metrics belonging to a specific collection"
+    }
+  ],
+  "categories": ["analytics", "data", "business-intelligence"],
+  "keywords": [
+    "metrics",
+    "business-intelligence",
+    "analytics",
+    "data-governance",
+    "semantic-layer",
+    "dbt",
+    "sql",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "repository": "https://github.com/YOUR_USERNAME/metricstore",
+  "homepage": "https://github.com/YOUR_USERNAME/metricstore#readme",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "MetricStore Contributors"
+  },
+  "runtime": {
+    "type": "docker",
+    "image": "ghcr.io/YOUR_USERNAME/metricstore:latest",
+    "env": [
+      {
+        "name": "DATABASE_URL",
+        "description": "PostgreSQL connection string (asyncpg format)",
+        "required": true,
+        "example": "postgresql+asyncpg://user:pass@host:5432/metricstore"
+      },
+      {
+        "name": "AUTH_ENABLED",
+        "description": "Enable API key authentication",
+        "required": false,
+        "default": "false"
+      },
+      {
+        "name": "API_KEYS",
+        "description": "Comma-separated list of valid API keys",
+        "required": false
+      }
+    ],
+    "ports": [
+      {
+        "port": 8000,
+        "protocol": "http",
+        "description": "REST API + MCP endpoint"
+      }
+    ]
+  }
+}

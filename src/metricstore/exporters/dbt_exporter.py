@@ -6,7 +6,7 @@ and measure context inside a dbt project to be executable.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import StringIO
 
 from ruamel.yaml import YAML
@@ -23,7 +23,7 @@ class DbtExporter:
     }
 
     def export(self, metrics: list[dict], version: str) -> str:
-        generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
         out_metrics: list[dict] = []
         for m in metrics:
@@ -67,7 +67,8 @@ class DbtExporter:
         header = (
             "# Exported from MetricStore to dbt MetricFlow format (best effort)\n"
             f"# Generated at {generated_at} from MetricStore v{version}\n"
-            "# NOTE: These metric definitions require semantic_models/measures in your dbt project.\n"
+            "# NOTE: These metric definitions require semantic_models/measures "
+            "in your dbt project.\n"
         )
         return header + buf.getvalue()
 

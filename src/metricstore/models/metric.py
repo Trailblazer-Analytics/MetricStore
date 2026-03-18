@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -23,15 +23,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from metricstore.models.base import Base
 
+if TYPE_CHECKING:
+    from metricstore.models.metric_collection import MetricCollection
+    from metricstore.models.metric_version import MetricVersion
 
-class MetricType(str, enum.Enum):
+
+class MetricType(StrEnum):
     simple = "simple"
     derived = "derived"
     cumulative = "cumulative"
     conversion = "conversion"
 
 
-class MetricStatus(str, enum.Enum):
+class MetricStatus(StrEnum):
     active = "active"
     draft = "draft"
     deprecated = "deprecated"
