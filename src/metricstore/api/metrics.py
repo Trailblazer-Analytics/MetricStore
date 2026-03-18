@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import json
-from io import StringIO
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, Query, Response, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import PlainTextResponse
-from ruamel.yaml import YAML
 from pydantic import BaseModel
 
 from metricstore.dependencies import get_metric_service
+from metricstore.exporters import DbtExporter, JsonExporter, OsiExporter, YamlExporter
+from metricstore.importers import DbtImporter, MetricStoreYamlImporter
+from metricstore.config import settings
 from metricstore.schemas.common import ImportResult
 from metricstore.schemas.metric import (
     MetricCreate,
@@ -25,9 +27,6 @@ from metricstore.schemas.version import VersionList, VersionResponse
 from metricstore.services.metric_service import MetricService
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
-
-_yaml = YAML()
-_yaml.default_flow_style = False
 
 
 # ── Export filter body (optional) ────────────────────────────────────────────
@@ -62,10 +61,26 @@ async def create_metric(
     "/export",
     summary="Export metrics",
     tags=["import/export"],
-    responses={200: {"content": {"application/json": {}, "application/yaml": {}}}},
+    responses={
+        200: {
+            "content": {
+                "application/json": {},
+                "application/yaml": {},
+                "text/yaml": {},
+            }
+        }
+    },
 )
 async def export_metrics(
-    fmt: str = Query("json", alias="format", pattern="^(json|yaml)$"),
+    fmt: str = Query(
+        "json",
+        alias="format",
+        pattern="^(json|yaml|osi|dbt)$",
+        description=(
+            "Export format. 'osi' is experimental OSI-compatible output and may "
+            "change as the OSI specification evolves."
+        ),
+    ),
     body: ExportFilter = Body(default_factory=ExportFilter),
     svc: MetricService = Depends(get_metric_service),
 ) -> Response:
@@ -81,14 +96,51 @@ async def export_metrics(
         MetricResponse.model_validate(m).model_dump(mode="json") for m in metrics
     ]
 
-    if fmt == "yaml":
-        buf = StringIO()
-        _yaml.dump({"metrics": data}, buf)
-        return PlainTextResponse(buf.getvalue(), media_type="application/yaml")
+    now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    return Response(
-        content=json.dumps({"metrics": data}, indent=2, default=str),
-        media_type="application/json",
+    if fmt == "json":
+        content = JsonExporter().export(data, settings.app_version)
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="metricstore_export_{now}.json"'
+            },
+        )
+
+    if fmt == "yaml":
+        content = YamlExporter().export(data, settings.app_version)
+        return PlainTextResponse(
+            content,
+            media_type="application/yaml",
+            headers={
+                "Content-Disposition": f'attachment; filename="metricstore_export_{now}.yaml"'
+            },
+        )
+
+    if fmt == "osi":
+        content = OsiExporter().export(data, settings.app_version)
+        return PlainTextResponse(
+            content,
+            media_type="application/yaml",
+            headers={
+                "Content-Disposition": f'attachment; filename="metricstore_osi_export_{now}.yaml"'
+            },
+        )
+
+    if fmt == "dbt":
+        content = DbtExporter().export(data, settings.app_version)
+        return PlainTextResponse(
+            content,
+            media_type="application/yaml",
+            headers={
+                "Content-Disposition": f'attachment; filename="metricstore_dbt_export_{now}.yaml"'
+            },
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Unsupported export format '{fmt}'.",
     )
 
 
@@ -105,7 +157,8 @@ async def export_metrics(
     },
 )
 async def import_metrics(
-    file: UploadFile = File(..., description="JSON or YAML file"),
+    files: list[UploadFile] | None = File(default=None, description="One or more files"),
+    file: UploadFile | None = File(default=None, description="Single file (legacy clients)"),
     fmt: str = Query(
         "metricstore",
         alias="format",
@@ -114,55 +167,65 @@ async def import_metrics(
     ),
     svc: MetricService = Depends(get_metric_service),
 ) -> ImportResult:
-    if fmt in ("dbt", "cube"):
-        from fastapi import HTTPException
-
+    if fmt == "cube":
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=f"'{fmt}' importer is not yet implemented.",
+            detail="'cube' importer is not yet implemented.",
         )
 
-    raw = await file.read()
-    filename = file.filename or ""
-
-    # Auto-detect JSON vs YAML from filename extension or first byte
-    try:
-        if filename.endswith(".json") or raw.lstrip()[:1] in (b"{", b"["):
-            payload: dict[str, Any] = json.loads(raw)
-        else:
-            _y = YAML()
-            payload = _y.load(raw.decode())
-    except Exception as exc:
-        from fastapi import HTTPException
-
+    upload_files: list[UploadFile] = list(files or [])
+    if file is not None:
+        upload_files.append(file)
+    if not upload_files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not parse file: {exc}",
+            detail="No file uploaded. Provide 'file' or 'files'.",
         )
-
-    # Support both {"metrics": [...]} wrapper and bare lists
-    rows: list[Any] = payload.get("metrics", payload) if isinstance(payload, dict) else payload
 
     imported = updated = skipped = 0
     errors: list[str] = []
 
-    for i, row in enumerate(rows):
+    dbt_importer = DbtImporter()
+    yaml_importer = MetricStoreYamlImporter()
+
+    parsed_metrics: list[MetricCreate] = []
+
+    for up in upload_files:
+        raw = await up.read()
+        filename = (up.filename or "").lower()
+        text_content = raw.decode("utf-8", errors="replace")
+
         try:
-            data = MetricCreate.model_validate(row)
+            if fmt == "dbt":
+                if filename.endswith("manifest.json") or filename.endswith(".json"):
+                    manifest = json.loads(text_content)
+                    parsed_metrics.extend(dbt_importer.parse_manifest(manifest))
+                else:
+                    parsed_metrics.extend(dbt_importer.parse_file(text_content))
+            else:
+                parsed_metrics.extend(yaml_importer.parse_file(text_content))
         except Exception as exc:
-            errors.append(f"Row {i}: validation error — {exc}")
-            continue
+            errors.append(f"{up.filename or 'uploaded file'}: {exc}")
+
+    for data in parsed_metrics:
         try:
             await svc.create_metric(data)
             imported += 1
+            continue
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_409_CONFLICT:
+                errors.append(f"{data.name}: {exc.detail}")
+                continue
+
+        # Upsert path: metric already exists -> update by name.
+        try:
+            existing = await svc.get_metric_by_name(data.name)
+            patch_data = data.model_dump(exclude={"name"})
+            await svc.update_metric(existing.id, MetricUpdate.model_validate(patch_data))
+            updated += 1
         except Exception as exc:
-            # 409 = already exists → treat as skip
-            if getattr(getattr(exc, "status_code", None), "real", 409) == 409 or (
-                hasattr(exc, "status_code") and exc.status_code == 409
-            ):
-                skipped += 1
-            else:
-                errors.append(f"Row {i} ({row.get('name', '?')}): {exc}")
+            skipped += 1
+            errors.append(f"{data.name}: failed to update existing metric ({exc})")
 
     return ImportResult(imported=imported, updated=updated, skipped=skipped, errors=errors)
 

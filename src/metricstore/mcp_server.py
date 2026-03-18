@@ -11,15 +11,21 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Query
 from fastapi_mcp import FastApiMCP
+from fastapi_mcp.types import AuthConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from metricstore.auth import require_api_key
 from metricstore.dependencies import get_db
 from metricstore.services.collection_service import CollectionService
 from metricstore.services.metric_service import MetricService
 
 
 def _create_custom_mcp_router() -> APIRouter:
-    router = APIRouter(prefix="/mcp", tags=["mcp-tools"])
+    router = APIRouter(
+        prefix="/mcp",
+        tags=["mcp-tools"],
+        dependencies=[Depends(require_api_key)],
+    )
 
     @router.get(
         "/health",
@@ -321,6 +327,7 @@ def setup_mcp(app: FastAPI) -> None:
             "MCP interface for discovering and querying governed business metrics "
             "from MetricStore."
         ),
+        auth_config=AuthConfig(dependencies=[Depends(require_api_key)]),
     )
     mcp.mount_http(mount_path="/mcp")
 

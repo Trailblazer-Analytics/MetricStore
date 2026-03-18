@@ -216,6 +216,26 @@ async def test_export_yaml(client, mock_svc):
     assert "monthly_revenue" in r.text
 
 
+async def test_export_osi(client, mock_svc):
+    r = await client.post("/api/v1/metrics/export?format=osi")
+    assert r.status_code == 200
+    assert "yaml" in r.headers["content-type"]
+    assert "osi_version" in r.text
+    assert "experimental" in r.text.lower()
+    assert "Content-Disposition" in r.headers
+    assert "metricstore_osi_export_" in r.headers["Content-Disposition"]
+
+
+async def test_export_dbt(client, mock_svc):
+    r = await client.post("/api/v1/metrics/export?format=dbt")
+    assert r.status_code == 200
+    assert "yaml" in r.headers["content-type"]
+    assert "metrics:" in r.text
+    assert "best effort" in r.text.lower()
+    assert "Content-Disposition" in r.headers
+    assert "metricstore_dbt_export_" in r.headers["Content-Disposition"]
+
+
 async def test_export_invalid_format(client):
     r = await client.post("/api/v1/metrics/export?format=csv")
     assert r.status_code == 422
@@ -238,12 +258,16 @@ async def test_import_metricstore_json(client, mock_svc):
     assert body["errors"] == []
 
 
-async def test_import_unsupported_format_returns_501(client):
+async def test_import_dbt_format_is_supported(client):
     r = await client.post(
         "/api/v1/metrics/import?format=dbt",
         files={"file": ("metrics.yml", b"", "text/yaml")},
     )
-    assert r.status_code == 501
+    assert r.status_code == 200
+    body = r.json()
+    assert body["imported"] == 0
+    assert body["updated"] == 0
+    assert body["skipped"] == 0
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

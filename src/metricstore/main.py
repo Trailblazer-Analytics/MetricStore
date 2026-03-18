@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from metricstore.api import api_router
+from metricstore.auth import initialize_auth_runtime
 from metricstore.config import settings
 from metricstore.mcp_server import setup_mcp
 
@@ -41,6 +42,7 @@ _OPENAPI_TAGS = [
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        initialize_auth_runtime()
         # Initialize MCP interface once when the app starts.
         setup_mcp(app)
         yield

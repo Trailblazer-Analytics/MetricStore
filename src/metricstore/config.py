@@ -26,5 +26,10 @@ class Settings(BaseSettings):
     debug: bool = False
     api_prefix: str = "/api/v1"
 
+    # Authentication (optional)
+    auth_enabled: bool = False
+    # Comma-separated API keys, e.g. "key1,key2,key3"
+    api_keys: str = ""
+
 
 settings = Settings()
