@@ -2,7 +2,7 @@
   "name": "metricstore",
   "display_name": "MetricStore - Business Metrics Catalog",
   "description": "Query and discover governed business metric definitions. Get metric formulas, SQL expressions, dimensions, and ownership info for use in AI-powered analytics.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "transport": {
     "type": "sse",
     "url": "http://localhost:8000/mcp"
@@ -33,7 +33,11 @@
       "description": "Get all metrics belonging to a specific collection"
     }
   ],
-  "categories": ["analytics", "data", "business-intelligence"],
+  "categories": [
+    "analytics",
+    "data",
+    "business-intelligence"
+  ],
   "keywords": [
     "metrics",
     "business-intelligence",

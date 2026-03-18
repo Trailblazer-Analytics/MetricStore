@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "metricstore"
-version = "0.1.0"
+version = "0.1.1"
 description = "A lightweight, tool-agnostic metrics catalog with REST API and MCP server"
 readme = "README.md"
 license = { file = "LICENSE" }
