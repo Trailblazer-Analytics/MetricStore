@@ -5,6 +5,9 @@ on:
     branches: ["main"]
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -43,9 +46,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev]
 
+      - name: Wait for PostgreSQL
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.time() + 30
+          last_error = None
+
+          while time.time() < deadline:
+              try:
+                  with socket.create_connection(("127.0.0.1", 5432), timeout=1):
+                      print("PostgreSQL is accepting TCP connections")
+                      break
+              except OSError as exc:
+                  last_error = exc
+                  time.sleep(1)
+          else:
+              raise SystemExit(f"PostgreSQL did not become ready: {last_error}")
+          PY
+
       - name: Run tests with coverage
         run: |
-          pytest --cov=metricstore --cov-report=term-missing --cov-report=xml --cov-fail-under=55
+          pytest --cov=metricstore --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

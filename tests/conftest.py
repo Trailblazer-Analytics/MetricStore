@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncGenerator
 
@@ -15,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 # Ensure all model tables are registered in metadata before create_all/drop_all.
 import metricstore.models.collection  # noqa: F401
@@ -33,6 +35,7 @@ POSTGRES_TEST_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+asyncpg://metricstore:metricstore@localhost:5432/metricstore",
 )
+HAS_EXPLICIT_TEST_DATABASE_URL = "TEST_DATABASE_URL" in os.environ
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +50,7 @@ def _disable_auth_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def sqlite_engine():
     engine = create_async_engine(SQLITE_TEST_URL, future=True)
     try:
@@ -74,16 +77,32 @@ async def sqlite_async_session(sqlite_engine) -> AsyncGenerator[AsyncSession, No
 # ---------------------------------------------------------------------------
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def integration_engine():
-    engine = create_async_engine(POSTGRES_TEST_URL, future=True)
+    engine = create_async_engine(
+        POSTGRES_TEST_URL,
+        future=True,
+        poolclass=NullPool,
+    )
+    last_error: Exception | None = None
 
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-    except (SQLAlchemyError, OSError, RuntimeError) as exc:
+    for _ in range(15):
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            last_error = None
+            break
+        except (SQLAlchemyError, OSError, RuntimeError) as exc:
+            last_error = exc
+            await asyncio.sleep(1)
+
+    if last_error is not None:
         await engine.dispose()
-        pytest.skip(f"PostgreSQL integration DB is unavailable: {exc}")
+        if HAS_EXPLICIT_TEST_DATABASE_URL:
+            raise RuntimeError(
+                "Configured PostgreSQL integration DB is unavailable"
+            ) from last_error
+        pytest.skip(f"PostgreSQL integration DB is unavailable: {last_error}")
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -97,8 +116,8 @@ async def integration_engine():
         await engine.dispose()
 
 
-@pytest_asyncio.fixture
-async def async_session_factory(integration_engine) -> async_sessionmaker[AsyncSession]:
+@pytest.fixture
+def async_session_factory(integration_engine) -> async_sessionmaker[AsyncSession]:
     """Create independent async sessions for integration tests."""
     return async_sessionmaker(
         integration_engine,
