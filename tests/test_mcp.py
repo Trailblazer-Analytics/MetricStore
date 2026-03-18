@@ -76,6 +76,17 @@ async def test_mcp_discover_metrics_with_search(test_client, seeded_db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_discover_metrics_with_filters(test_client, seeded_db) -> None:
+    r = await test_client.get(
+        "/mcp/tools/discover_metrics?tags=marketing&status=active&metric_type=derived"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] >= 1
+    assert all("marketing" in item["tags"] for item in body["items"])
+
+
+@pytest.mark.asyncio
 async def test_mcp_search_metrics(test_client, seeded_db) -> None:
     r = await test_client.get("/mcp/tools/search_metrics?query=revenue")
     assert r.status_code == 200
@@ -83,6 +94,14 @@ async def test_mcp_search_metrics(test_client, seeded_db) -> None:
     assert body["tool"] == "search_metrics"
     assert body["query"] == "revenue"
     assert any(item["name"] == "revenue" for item in body["items"])
+
+
+@pytest.mark.asyncio
+async def test_mcp_search_metrics_medium_relevance(test_client, seeded_db) -> None:
+    r = await test_client.get("/mcp/tools/search_metrics?query=customer")
+    assert r.status_code == 200
+    body = r.json()
+    assert any(item["relevance"] == "medium" for item in body["items"])
 
 
 @pytest.mark.asyncio
@@ -104,12 +123,43 @@ async def test_mcp_get_metric_sql(test_client, seeded_db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_get_metric_sql_with_time_grain_override(
+    test_client, seeded_db
+) -> None:
+    r = await test_client.get(
+        "/mcp/tools/get_metric_sql?metric_name=revenue&time_grain=month"
+    )
+    assert r.status_code == 200
+    assert r.json()["time_grain"] == "month"
+
+
+@pytest.mark.asyncio
 async def test_mcp_list_collections_empty(test_client) -> None:
     r = await test_client.get("/mcp/tools/list_collections")
     assert r.status_code == 200
     body = r.json()
     assert body["tool"] == "list_collections"
     assert isinstance(body["items"], list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_collections_with_counts(test_client, seeded_db) -> None:
+    collection = await test_client.post(
+        "/api/v1/collections", json={"name": "mcp_collection"}
+    )
+    collection_id = collection.json()["id"]
+    metric_id = seeded_db["metrics"]["revenue"].id
+
+    add_metric = await test_client.post(
+        f"/api/v1/collections/{collection_id}/metrics/{metric_id}"
+    )
+    assert add_metric.status_code == 204
+
+    r = await test_client.get("/mcp/tools/list_collections")
+    assert r.status_code == 200
+    body = r.json()
+    item = next(row for row in body["items"] if row["name"] == "mcp_collection")
+    assert item["metric_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -122,3 +172,24 @@ async def test_mcp_get_collection_metrics_not_found(test_client) -> None:
     assert body["count"] == 0
     assert "not found" in body["context"].lower()
 
+
+@pytest.mark.asyncio
+async def test_mcp_get_collection_metrics_success(test_client, seeded_db) -> None:
+    collection = await test_client.post(
+        "/api/v1/collections", json={"name": "revenue_metrics"}
+    )
+    collection_id = collection.json()["id"]
+    metric_id = seeded_db["metrics"]["revenue"].id
+
+    add_metric = await test_client.post(
+        f"/api/v1/collections/{collection_id}/metrics/{metric_id}"
+    )
+    assert add_metric.status_code == 204
+
+    r = await test_client.get(
+        "/mcp/tools/get_collection_metrics?collection_name=revenue_metrics"
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    assert body["items"][0]["name"] == "revenue"
